@@ -27,81 +27,62 @@ class _MyApplicationPageState extends State<MyApplicationPage> {
   String txtDescription = "";
   bool _isDropdownValid = false;
   var data = [];
+
   Future<void> _submitAnswers() async {
+    // var data = [];
     final prefs = await SharedPreferences.getInstance();
     prefs.setBool("isLoggedIn", true);
     int cid = int.parse(prefs.getString("sID")!);
-
-    List<Map<String, String?>> data = [];
-    List<Map<String, String?>> dataToSend = [];
-
-    _selectedAnswers.forEach((questionId, answerId) {
+    _selectedAnswers.forEach((questionId, answerId) async {
       Map<String, String?> jsonData = {
         "question_id": questionId.toString(),
         "answer_id": answerId.toString(),
         "student_id": cid.toString()
-      };
-      data.add(jsonData);
-    });
+      }; // Replace with the appropriate student ID
 
-    for (var jsonData in data) {
-      bool isAlreadyInDatabase = await _checkIfDataExists(jsonData);
-      if (isAlreadyInDatabase) {
-        _showMyDialogSuc(
-            txtTitle = "Sorry", txtDescription = "You submit it already");
-        print("Data is already in the database");
+      var all = Gateways().feedbackURL.toString();
+      var response = await get(Uri.parse(all));
+
+      if (response.statusCode == 200) {
+        var jasonData = jsonDecode(response.body);
+
+        // Check if the data is present in jasonData
+        if (jasonData["question_id"] == jsonData["question_id"] &&
+            jasonData["answer_id"] == jsonData["answer_id"] &&
+            jasonData["student_id"] == jsonData["student_id"]) {
+          // Data already exists in jasonData
+          _showMyDialog(
+              txtTitle = "Sorry", txtDescription = "You submit it already");
+          print("Data is already in the database");
+        } else {
+          // Data doesn't exist in jasonData, so add it to data
+          data.add(jsonData);
+        }
       } else {
-        dataToSend.add(jsonData);
+        // Handle the HTTP error if necessary
       }
-    }
-
-    if (dataToSend.isEmpty) {
-      print("No new data to send");
-      return;
-    }
-
-    bool success = await _addNewCust(dataToSend);
+    });
+    // print(data);
+    bool success = await _addnewCust();
 
     if (success) {
       // Handle success case
       Navigator.pop(context);
       print('Success');
+      // print(data);
     } else {
       // Handle error case
       print('Failed');
     }
   }
 
-  Future<bool> _checkIfDataExists(Map<String, String?> jsonData) async {
-    var checkDataUrl =
-        Gateways().feedbackURL.toString(); // Replace with your API endpoint
-
-    try {
-      var response = await http
-          .get(Uri.parse(checkDataUrl).replace(queryParameters: jsonData));
-
-      if (response.statusCode == 200) {
-        // Data exists in the database
-        return true;
-      } else if (response.statusCode == 404) {
-        // Data does not exist in the database
-        return false;
-      } else {
-        // Handle other response status codes as needed
-        return false;
-      }
-    } catch (e) {
-      // Handle network errors or exceptions
-      print("Error checking data: $e");
-      return false;
-    }
-  }
-
-  Future<bool> _addNewCust(List<Map<String, String?>> dataToSend) async {
+  Future<bool> _addnewCust() async {
     var addQue = Gateways().feedbackURL.toString();
+    print(data);
     List<Future<Response>> requests = [];
 
-    for (Map<String, String?> body in dataToSend) {
+    for (Map<String, String?> body in data) {
+      print(body);
       var request = post(Uri.parse(addQue), body: body);
       requests.add(request);
     }
@@ -118,57 +99,6 @@ class _MyApplicationPageState extends State<MyApplicationPage> {
 
     return true;
   }
-
-  // Future<void> _submitAnswers() async {
-  //   // var data = [];
-  //   final prefs = await SharedPreferences.getInstance();
-  //   prefs.setBool("isLoggedIn", true);
-  //   int cid = int.parse(prefs.getString("sID")!);
-  //   _selectedAnswers.forEach((questionId, answerId) {
-  //     Map<String, String?> jsonData = {
-  //       "question_id": questionId.toString(),
-  //       "answer_id": answerId.toString(),
-  //       "student_id": cid.toString()
-  //     }; // Replace with the appropriate student ID
-  //     // var jsonString = jsonEncode(jsonData);
-  //     data.add(jsonData);
-  //   });
-  //   // print(data);
-  //   bool success = await _addnewCust();
-
-  //   if (success) {
-  //     // Handle success case
-  //     Navigator.pop(context);
-  //     print('Success');
-  //     // print(data);
-  //   } else {
-  //     // Handle error case
-  //     print('Failed');
-  //   }
-  // }
-  // Future<bool> _addnewCust() async {
-  //   var addQue = Gateways().feedbackURL.toString();
-  //   print(data);
-  //   List<Future<Response>> requests = [];
-
-  //   for (Map<String, String?> body in data) {
-  //     print(body);
-  //     var request = post(Uri.parse(addQue), body: body);
-  //     requests.add(request);
-  //   }
-
-  //   var responses = await Future.wait(requests);
-
-  //   for (var response in responses) {
-  //     var signData = jsonDecode(response.body);
-  //     print(signData);
-  //     if (response.statusCode != 200) {
-  //       return false;
-  //     }
-  //   }
-
-  //   return true;
-  // }
 
   Future<void> _fetchData() async {
     var questions = Gateways().perquestionsURL.toString();
@@ -229,6 +159,44 @@ class _MyApplicationPageState extends State<MyApplicationPage> {
               child: const Text('Ok'),
               onPressed: () {
                 Navigator.pop(context);
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showMyDialog(String titel, String description) async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // user must tap button!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Center(
+              child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("${txtTitle}"),
+              Icon(
+                Icons.cancel,
+                color: Colors.red,
+                size: 25,
+              )
+            ],
+          )),
+          content: SingleChildScrollView(
+            child: ListBody(
+              children: <Widget>[
+                Center(child: Text("${txtDescription}.")),
+              ],
+            ),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: const Text('Ok'),
+              onPressed: () {
+                Navigator.of(context).pop();
               },
             ),
           ],
